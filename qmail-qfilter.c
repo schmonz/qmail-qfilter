@@ -15,7 +15,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include <sysdeps.h>
+#include "/opt/pkg/include/bglibs/sysdeps.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -53,6 +53,11 @@
 
 static const char* qqargv[2];
 
+static pid_t pid;
+static void debuglog(const char *funcname) {
+  fprintf(stderr, "qmail-qfilter pid %d in %s\n", pid, funcname);
+}
+
 /* a replacement for setenv(3) for systems that don't have one */
 void mysetenv(const char* key, const char* val, size_t vallen)
 {
@@ -88,8 +93,11 @@ static size_t msg_len = 0;
 /* Parse the sender address into user and host portions */
 size_t parse_sender(const char* env)
 {
+  debuglog("parse_sender");
+
   const char* ptr = env;
   char* at;
+  fprintf(stderr, "qmail-qfilter pid %d in parse_sender, first strlen\n", pid);
   size_t len = strlen(env);
   
   if(*ptr != 'F')
@@ -107,11 +115,13 @@ size_t parse_sender(const char* env)
 
   at = strrchr(ptr, '@');
   if(!at) {
+    fprintf(stderr, "qmail-qfilter pid %d in parse_sender, second strlen\n", pid);
     len = strlen(ptr);
     mysetenv("QMAILUSER", ptr, len);
     putenv("QMAILHOST=");
   }
   else {
+    fprintf(stderr, "qmail-qfilter pid %d in parse_sender, third strlen\n", pid);
     len = strlen(at);
     mysetenv("QMAILUSER", ptr, at-ptr);
     mysetenv("QMAILHOST", at+1, len-1);
@@ -144,6 +154,8 @@ void parse_rcpts(const char* env, int offset)
 
 void parse_envelope(void)
 {
+  debuglog("parse_envelope");
+
   const char* env;
   size_t offset;
   if ((env = mmap(0, env_len, PROT_READ, MAP_PRIVATE, ENVIN, 0)) == MAP_FAILED)
@@ -325,14 +337,17 @@ void run_filters(const command* first)
 
 int main(int argc, char* argv[])
 {
+  pid_t ppid;
   const command* filters;
   
+  pid = getpid(); ppid = getppid();
   filters = parse_args(argc-1, argv+1);
 
   if ((qqargv[0] = getenv("QQF_QMAILQUEUE")) == 0)
     qqargv[0] = QMAIL_QUEUE;
 
-  mysetenvu("QMAILPPID", getppid());
+  fprintf(stderr, "qmail-qfilter pid %d via parent %d\n", pid, ppid);
+  mysetenvu("QMAILPPID", ppid);
 
   copy_fd(0, 0, &msg_len);
   copy_fd(1, ENVIN, &env_len);
